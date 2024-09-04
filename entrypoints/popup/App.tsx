@@ -1,35 +1,36 @@
-import { useState } from 'react';
-import reactLogo from '@/assets/react.svg';
-import wxtLogo from '/wxt.svg';
-import './App.css';
+import React, { useState, useEffect } from 'react';
+import { ChakraProvider, Box, Flex, Icon, Text, Switch, FormControl, FormLabel } from '@chakra-ui/react';
+import { FaBeer } from 'react-icons/fa';
+import { theme } from '@/theme/theme';
+import { snapshotShowFps } from '@/utils/storage';
 
-function App() {
-  const [count, setCount] = useState(0);
+export default function App() {
+  const [showFps, setShowFps] = useState(false);
+
+  useEffect(() => {
+    const getShowFps = async () => {
+      setShowFps(await snapshotShowFps.getValue());
+    };
+    getShowFps();
+  }, []);
+
+  const handleToggle = async () => {
+    setShowFps(!showFps);
+    await snapshotShowFps.setValue(!showFps);
+  };
 
   return (
-    <>
-      <div>
-        <a href="https://wxt.dev" target="_blank">
-          <img src={wxtLogo} className="logo" alt="WXT logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>WXT + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the WXT and React logos to learn more
-      </p>
-    </>
+    <ChakraProvider theme={theme}>
+      <Box p={4}>
+        <Flex align="center" mb={4} bg="red.500" p={2} borderRadius="md" whiteSpace="nowrap">
+          <Icon as={FaBeer} w={6} h={6} mr={2} color="white" />
+          <Text fontSize="xl" color="white">Youtube Snapshot</Text>
+        </Flex>
+        <FormControl display="flex" alignItems="center">
+          <FormLabel htmlFor="show-fps" mb="0">Show FPS</FormLabel>
+          <Switch id="show-fps" isChecked={showFps} onChange={handleToggle} />
+        </FormControl>
+      </Box>
+    </ChakraProvider>
   );
 }
-
-export default App;
