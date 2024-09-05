@@ -7,6 +7,8 @@ import { snapshotShowFps } from '@/utils/storage';
 export default function App() {
   const [showFps, setShowFps] = useState(false);
 
+  // コンポーネント読み込み時に動作し、ストレージから設定値を取得する
+  // useEffect での async の指定方法に注意
   useEffect(() => {
     const getShowFps = async () => {
       setShowFps(await snapshotShowFps.getValue());
@@ -14,6 +16,7 @@ export default function App() {
     getShowFps();
   }, []);
 
+  // トグルスイッチを切り替えた際に呼び出され、設定値をストレージに保存する
   const handleToggle = async () => {
     setShowFps(!showFps);
     await snapshotShowFps.setValue(!showFps);

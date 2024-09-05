@@ -1,10 +1,15 @@
 import { snapshotShowFps } from "@/utils/storage";
 import { FrameRateCalculator } from "@/utils/frame-rate-calculator";
 
+const frameRateCalculator = new FrameRateCalculator();
+let frameRateInterval: NodeJS.Timeout;
+
 export default defineContentScript({
-  // 
+  // マッチしたURLで拡張機能を有効にする
   matches: ['*://www.youtube.com/*'],
+  // メイン関数
   main(ctx) {
+    // 統合されたコンテンツUIを作成してマウントする
     const ui = createIntegratedUi(ctx, {
       position: 'inline',
       onMount: handleUiMount,
@@ -13,6 +18,7 @@ export default defineContentScript({
   }
 });
 
+// YoutubeのコンテンツUIがマウントされた際に呼び出される
 function handleUiMount() {
   // MutationObserverオブジェクトを作成し、handleMutations関数をコールバックとして指定
   const observer = new MutationObserver(handleMutations);
@@ -20,6 +26,7 @@ function handleUiMount() {
   observer.observe(document.body, { childList: true, subtree: true });
 }
 
+// DOMの変更を監視して処理を実行する
 async function handleMutations() {
   // Youtube 動画上にボタンを追加
   addButtons();
@@ -38,58 +45,66 @@ async function handleMutations() {
   });
 }
 
+// Youtube 動画上にボタンを追加
 function addButtons() {
-  // Check if the buttons already exist
   if (document.getElementById('custom-buttons-container'))
     return;
 
-  // Create a container for the buttons
+  // ボタンを配置するコンテナを作成
   const container = document.createElement('div');
   container.id = 'custom-buttons-container';
-  container.style.position = 'absolute';
-  container.style.top = '10px';
-  container.style.right = '30px';
-  container.style.zIndex = '1000';
-  container.style.display = 'flex';
-  container.style.gap = '5px';
-
-  // Button configurations
-  const buttons = [
-      { label: '-1.', class: 'skiptime -1' },
-      { label: '-.1', class: 'skiptime -0.1' },
-      { label: '-f', class: 'skipframe -1' },
-      { label: '+f', class: 'skipframe 1' },
-      { label: '+.1', class: 'skiptime 0.1' },
-      { label: '+1.', class: 'skiptime 1' },
-      { label: '📷', class: 'screenshot' }
-  ];
-
-  // Create and style each button
-  buttons.forEach(buttonConfig => {
-      const button = document.createElement('button');
-      button.innerText = buttonConfig.label;
-      button.className = buttonConfig.class;
-      button.style.alignItems = 'center';
-      button.style.justifyContent = 'center';
-      button.style.padding = '5px';
-      button.style.width = '30px';
-      button.style.backgroundColor = 'rgba(255, 0, 0, 0.6)';
-      button.style.color = '#ffffff';
-      button.style.border = 'none';
-      button.style.cursor = 'pointer';
-      button.style.fontSize = '14px';
-      button.style.borderRadius = '3px';
-      button.addEventListener('click', () => handleButtonClick(button.className));
-      container.appendChild(button);
+  Object.assign(container.style, {
+    position: 'absolute',
+    top: '10px',
+    right: '30px',
+    zIndex: '1000',
+    display: 'flex',
+    gap: '5px'
   });
 
-  // Append the container to the YouTube player
+  // 配置するボタンの定義
+  const buttons = [
+    { label: '-1', class: 'skiptime -1' },
+    { label: '-.1', class: 'skiptime -0.1' },
+    { label: '-f', class: 'skipframe -1' },
+    { label: '+f', class: 'skipframe 1' },
+    { label: '+.1', class: 'skiptime 0.1' },
+    { label: '+1', class: 'skiptime 1' },
+    { label: '📷', class: 'screenshot' }
+  ];
+
+  // ボタンのスタイルを定義
+  const buttonStyle = {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '5px',
+    width: '30px',
+    backgroundColor: 'rgba(255, 0, 0, 0.6)',
+    color: '#ffffff',
+    border: 'none',
+    cursor: 'pointer',
+    fontSize: '14px',
+    borderRadius: '3px'
+  };
+
+  // ボタンを作成してコンテナに配置
+  buttons.forEach(buttonConfig => {
+    const button = document.createElement('button');
+    button.innerText = buttonConfig.label;
+    button.className = buttonConfig.class;
+    Object.assign(button.style, buttonStyle);
+    button.addEventListener('click', () => handleButtonClick(button.className));
+    container.appendChild(button);
+  });
+
+  // Youtubeのプレイヤー要素を取得してコンテナを配置
   const player = document.querySelector('.html5-video-player');
   if (player) {
-      player.appendChild(container);
+    player.appendChild(container);
   }
 }
 
+// FPS表示を作成する
 function createFrameRateDisplay() {
   if (document.getElementById('frame-rate-display')) {
     return;
@@ -97,38 +112,40 @@ function createFrameRateDisplay() {
 
   const frameRateDisplay = document.createElement('div');
   frameRateDisplay.id = 'frame-rate-display';
-  frameRateDisplay.style.padding = '5px';
-  frameRateDisplay.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
-  frameRateDisplay.style.color = '#ffffff';
-  frameRateDisplay.style.fontSize = '14px';
-  frameRateDisplay.style.borderRadius = '3px';
+  Object.assign(frameRateDisplay.style, {
+    padding: '5px',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    color: '#ffffff',
+    fontSize: '14px',
+    borderRadius: '3px'
+  });
   frameRateDisplay.innerText = '0FPS';
 
   const container = document.getElementById('custom-buttons-container');
   if (container) {
-      container.insertBefore(frameRateDisplay, container.firstChild);
+    container.insertBefore(frameRateDisplay, container.firstChild);
   }
-
+  // FPS表示を更新するためのインターバルを設定
   frameRateInterval = setInterval(() => {
-      const frameRate = frameRateCalculator.getFrameRate().toFixed(2);
-      frameRateDisplay.innerText = `${frameRate}FPS`;
+    const frameRate = frameRateCalculator.getFrameRate().toFixed(2);
+    frameRateDisplay.innerText = `${frameRate}FPS`;
   }, 1000);
 }
 
+// FPS表示を削除する
 function removeFrameRateDisplay() {
   const frameRateDisplay = document.getElementById('frame-rate-display');
   if (frameRateDisplay) {
-      frameRateDisplay.remove();
-      clearInterval(frameRateInterval);
+    frameRateDisplay.remove();
+    clearInterval(frameRateInterval);
   }
 }
 
-const frameRateCalculator = new FrameRateCalculator();
-let frameRateInterval: NodeJS.Timeout;
-
+// ボタンクリック時の処理
 function handleButtonClick(buttonClass: string) {
+  // ボタンのクラス名からアクションと値を取得
   const [action, value] = buttonClass.split(' ');
-
+  // アクションに応じた処理を実行
   switch (action) {
     case 'skiptime':
       skipTime(parseFloat(value));
@@ -144,6 +161,7 @@ function handleButtonClick(buttonClass: string) {
   }
 }
 
+// 動画を指定した秒数分スキップする
 function skipTime(seconds: number) {
   const video = document.querySelector('video');
   if (video) {
@@ -151,6 +169,7 @@ function skipTime(seconds: number) {
   }
 }
 
+// 動画を指定したフレーム数分スキップする
 function skipFrame(frames: number) {
   const video = document.querySelector('video');
   if (video) {
@@ -160,22 +179,36 @@ function skipFrame(frames: number) {
   }
 }
 
+// 動画のスクリーンショットを撮影する
 function takeScreenshot() {
   const video = document.querySelector('video');
   if (video) {
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const context = canvas.getContext('2d');
-      if (!context) {
-          alert('Failed to create canvas context');
-          return;
-      }
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const dataURL = canvas.toDataURL('image/png');
-      const link = document.createElement('a');
-      link.href = dataURL;
-      link.download = 'screenshot.png';
-      link.click();
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      alert('Failed to create canvas context');
+      return;
+    }
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const dataURL = canvas.toDataURL('image/png');
+    const link = document.createElement('a');
+    link.href = dataURL;
+    link.download = `snapshot_${getFormattedDate()}.png`;
+    link.click();
   }
+}
+
+// 日付をフォーマットして返す
+function getFormattedDate() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = (now.getMonth() + 1).toString().padStart(2, '0');
+  const d = now.getDate().toString().padStart(2, '0');
+  const h = now.getHours().toString().padStart(2, '0');
+  const mi = now.getMinutes().toString().padStart(2, '0');
+  const s = now.getSeconds().toString().padStart(2, '0');
+  const ms = now.getMilliseconds().toString().padStart(3, '0');
+  return `${y}${m}${d}_${h}${mi}${s}_${ms}`;
 }

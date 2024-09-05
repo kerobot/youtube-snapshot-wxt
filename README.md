@@ -5,7 +5,7 @@
 Youtube 動画のスクリーンショットを撮るための Chrome 拡張機能です。  
 WXT + React で開発しています。
 
-[WXT](https://wxt.dev/) - Put Developer Experience First
+[WXT](https://wxt.dev/) - Next-gen Web Extension Framework
 
 > WXT's simplifies the chrome extension development process by providing tools for zipping and publishing, the best-in-class dev mode, an opinionated project structure, and more. Iterate faster, develop features not build scripts, and use everything the JS ecosystem has to offer.
 
