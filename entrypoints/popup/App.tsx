@@ -4,6 +4,7 @@ import { theme } from '@/theme/theme';
 import { FaYoutube } from 'react-icons/fa';
 import { snapshotShowFps } from '@/utils/storage';
 
+// ポップアップページのコンポーネント
 export default function App() {
   const [showFps, setShowFps] = useState(false);
 

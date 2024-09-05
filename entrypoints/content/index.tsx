@@ -1,13 +1,15 @@
 import { snapshotShowFps } from "@/utils/storage";
 import { FrameRateCalculator } from "@/utils/frame-rate-calculator";
 
+// フレームレート計算クラスのインスタンスを作成
 const frameRateCalculator = new FrameRateCalculator();
+// FPS表示更新用のインターバルID
 let frameRateInterval: NodeJS.Timeout;
 
+// コンテンツスクリプトのメイン関数
 export default defineContentScript({
   // マッチしたURLで拡張機能を有効にする
   matches: ['*://www.youtube.com/*'],
-  // メイン関数
   main(ctx) {
     // 統合されたコンテンツUIを作成してマウントする
     const ui = createIntegratedUi(ctx, {

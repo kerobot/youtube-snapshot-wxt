@@ -1,3 +1,4 @@
+// フレームレートを計算するクラス
 export class FrameRateCalculator {
     private lastFrameTime: number;
     private frameTimes: number[];
