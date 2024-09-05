@@ -2,89 +2,40 @@ import { snapshotShowFps } from "@/utils/storage";
 import { FrameRateCalculator } from "@/utils/frame-rate-calculator";
 
 export default defineContentScript({
+  // 
   matches: ['*://www.youtube.com/*'],
   main(ctx) {
     const ui = createIntegratedUi(ctx, {
       position: 'inline',
-      onMount: () => {
-        const observer = new MutationObserver(async () => {
-          addButtons();
-
-          const showFps = await snapshotShowFps.getValue();
-          if (showFps) {
-            createFrameRateDisplay();
-          }
-
-          snapshotShowFps.watch(async (showFps) => {
-            if (showFps) {
-                createFrameRateDisplay();
-            } else {
-                removeFrameRateDisplay();
-            }
-          });
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
-      },
+      onMount: handleUiMount,
     });
     ui.mount();
   }
 });
 
-const frameRateCalculator = new FrameRateCalculator();
-let frameRateInterval: NodeJS.Timeout;
-
-function handleButtonClick(buttonClass: string) {
-  const [action, value] = buttonClass.split(' ');
-
-  switch (action) {
-    case 'skiptime':
-      skipTime(parseFloat(value));
-      break;
-    case 'skipframe':
-      skipFrame(parseInt(value));
-      break;
-    case 'screenshot':
-      takeScreenshot();
-      break;
-    default:
-      alert('Unknown action');
-  }
+function handleUiMount() {
+  // MutationObserverオブジェクトを作成し、handleMutations関数をコールバックとして指定
+  const observer = new MutationObserver(handleMutations);
+  // document.bodyを監視対象に設定し、子要素の追加・削除および全ての子孫要素の変更を監視
+  observer.observe(document.body, { childList: true, subtree: true });
 }
 
-function skipTime(seconds: number) {
-  const video = document.querySelector('video');
-  if (video) {
-    video.currentTime += seconds;
+async function handleMutations() {
+  // Youtube 動画上にボタンを追加
+  addButtons();
+  // ストレージを確認し、FPS表示ありの場合、FPS表示を追加
+  const showFps = await snapshotShowFps.getValue();
+  if (showFps) {
+    createFrameRateDisplay();
   }
-}
-
-function skipFrame(frames: number) {
-  const video = document.querySelector('video');
-  if (video) {
-    const frameRate = frameRateCalculator.getFrameRate();
-    const seconds = frames / frameRate;
-    video.currentTime += seconds;
-  }
-}
-
-function takeScreenshot() {
-  const video = document.querySelector('video');
-  if (video) {
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const context = canvas.getContext('2d');
-      if (!context) {
-          alert('Failed to create canvas context');
-          return;
-      }
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const dataURL = canvas.toDataURL('image/png');
-      const link = document.createElement('a');
-      link.href = dataURL;
-      link.download = 'screenshot.png';
-      link.click();
-  }
+  // ストレージの変更を監視し、FPS表示の追加・削除を切り替える
+  snapshotShowFps.watch(async (showFps) => {
+    if (showFps) {
+      createFrameRateDisplay();
+    } else {
+      removeFrameRateDisplay();
+    }
+  });
 }
 
 function addButtons() {
@@ -169,5 +120,62 @@ function removeFrameRateDisplay() {
   if (frameRateDisplay) {
       frameRateDisplay.remove();
       clearInterval(frameRateInterval);
+  }
+}
+
+const frameRateCalculator = new FrameRateCalculator();
+let frameRateInterval: NodeJS.Timeout;
+
+function handleButtonClick(buttonClass: string) {
+  const [action, value] = buttonClass.split(' ');
+
+  switch (action) {
+    case 'skiptime':
+      skipTime(parseFloat(value));
+      break;
+    case 'skipframe':
+      skipFrame(parseInt(value));
+      break;
+    case 'screenshot':
+      takeScreenshot();
+      break;
+    default:
+      alert('Unknown action');
+  }
+}
+
+function skipTime(seconds: number) {
+  const video = document.querySelector('video');
+  if (video) {
+    video.currentTime += seconds;
+  }
+}
+
+function skipFrame(frames: number) {
+  const video = document.querySelector('video');
+  if (video) {
+    const frameRate = frameRateCalculator.getFrameRate();
+    const seconds = frames / frameRate;
+    video.currentTime += seconds;
+  }
+}
+
+function takeScreenshot() {
+  const video = document.querySelector('video');
+  if (video) {
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const context = canvas.getContext('2d');
+      if (!context) {
+          alert('Failed to create canvas context');
+          return;
+      }
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataURL = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.href = dataURL;
+      link.download = 'screenshot.png';
+      link.click();
   }
 }

@@ -5,7 +5,9 @@
 Youtube 動画のスクリーンショットを撮るための Chrome 拡張機能です。  
 WXT + React で開発しています。
 
-[WXT](https://wxt.dev/)
+[WXT](https://wxt.dev/) - Put Developer Experience First
+
+> WXT's simplifies the chrome extension development process by providing tools for zipping and publishing, the best-in-class dev mode, an opinionated project structure, and more. Iterate faster, develop features not build scripts, and use everything the JS ecosystem has to offer.
 
 ## プロジェクトの取得から起動
 
@@ -38,11 +40,17 @@ v22.7.0
 > npm run build
 ```
 
+### 公開のためのZIP化
+
+```powershell
+> npm run zip
+```
+
 ## Chrome 拡張機能の追加
 
 1. Chrome の URL 欄に `chrome://extensions/` を入力して拡張機能画面を開きます。
 2. 右上の `デベロッパーモード` を ON にします。
-3. `パッケージ化されていない拡張機能を読み込む` をクリックし、ビルドしたフォルダ（.output）を選択します。
+3. `パッケージ化されていない拡張機能を読み込む` をクリックし、ビルドしたフォルダ（.output/chrome-mv3）を選択します。
 
 ## 使い方
 
