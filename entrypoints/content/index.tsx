@@ -104,12 +104,12 @@ function addButtons() {
 
   // Button configurations
   const buttons = [
-      { label: '<<', class: 'skiptime -1' },
-      { label: '<', class: 'skiptime -0.1' },
-      { label: '<f', class: 'skipframe -1' },
-      { label: 'f>', class: 'skipframe 1' },
-      { label: '>', class: 'skiptime 0.1' },
-      { label: '>>', class: 'skiptime 1' },
+      { label: '-1.', class: 'skiptime -1' },
+      { label: '-.1', class: 'skiptime -0.1' },
+      { label: '-f', class: 'skipframe -1' },
+      { label: '+f', class: 'skipframe 1' },
+      { label: '+.1', class: 'skiptime 0.1' },
+      { label: '+1.', class: 'skiptime 1' },
       { label: '📷', class: 'screenshot' }
   ];
 
