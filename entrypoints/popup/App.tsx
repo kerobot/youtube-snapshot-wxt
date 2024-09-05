@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { ChakraProvider, Box, Flex, Icon, Text, Switch, FormControl, FormLabel } from '@chakra-ui/react';
-import { FaBeer } from 'react-icons/fa';
+import { useState, useEffect } from 'react';
+import { ChakraProvider, Box, Flex, Icon, Text, Switch, Link, Divider } from '@chakra-ui/react';
 import { theme } from '@/theme/theme';
+import { FaYoutube } from 'react-icons/fa';
 import { snapshotShowFps } from '@/utils/storage';
 
 export default function App() {
@@ -24,15 +24,24 @@ export default function App() {
 
   return (
     <ChakraProvider theme={theme}>
-      <Box p={4}>
-        <Flex align="center" mb={4} bg="red.500" p={2} borderRadius="md" whiteSpace="nowrap">
-          <Icon as={FaBeer} w={6} h={6} mr={2} color="white" />
-          <Text fontSize="xl" color="white">Youtube Snapshot</Text>
+      <Box width="280px" mx="auto">
+        <Flex justify="center" align="center" p={4} bg={'red.500'} color={'white'}>
+          <Icon as={FaYoutube} boxSize={8} />
+          <Text fontSize="xl" ml={2}>Youtube Snapshot</Text>
         </Flex>
-        <FormControl display="flex" alignItems="center">
-          <FormLabel htmlFor="show-fps" mb="0">Show FPS</FormLabel>
-          <Switch id="show-fps" isChecked={showFps} onChange={handleToggle} />
-        </FormControl>
+        <Box p={4}>
+          <Flex align="center" justify="space-between">
+            <Text fontSize="medium">Show FPS</Text>
+            <Switch isChecked={showFps} onChange={handleToggle} />
+          </Flex>
+        </Box>
+        <Box mb={2} textAlign="center">
+          <Divider />
+          <Flex justify="center" align="center">
+            <Text mr={2}>2024 ©</Text>
+            <Link href="https://qiita.com/kerobot" isExternal>kerobot</Link>
+          </Flex>
+        </Box>
       </Box>
     </ChakraProvider>
   );

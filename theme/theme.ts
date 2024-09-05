@@ -5,8 +5,7 @@ export const theme = extendTheme({
       global: {
         body: {
           margin: '0',
-          display: 'flex',
-          placeItems: 'center',
+          padding: '0',
         },
       },
     },
