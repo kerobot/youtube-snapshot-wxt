@@ -3,16 +3,19 @@ export class FrameRateCalculator {
     private lastFrameTime: number;
     private frameTimes: number[];
     private frameRate: number;
+    private isCalculating: boolean;
   
     constructor() {
         this.lastFrameTime = performance.now();
         this.frameTimes = [];
         this.frameRate = 0;
+        this.isCalculating = true;
         this.calculateFrameRate();
     }
   
     // フレームレートを計算する
     private calculateFrameRate(): void {
+        if (!this.isCalculating) return;
         // 現在時刻と前回のフレーム時刻の差を100件まで保持して平均フレーム間隔を計算
         const now = performance.now();
         const delta = now - this.lastFrameTime;
@@ -27,8 +30,22 @@ export class FrameRateCalculator {
         // 次のフレームレート計算をリクエストする
         requestAnimationFrame(this.calculateFrameRate.bind(this));
     }
-  
-    // フレームレートを取得する
+
+    // フレームレート計算を停止する
+    public stop(): void {
+        this.isCalculating = false;
+    }
+
+    // フレームレート計算を再開する
+    public start(): void {
+        if (!this.isCalculating) {
+            this.isCalculating = true;
+            this.lastFrameTime = performance.now();
+            this.calculateFrameRate();
+        }
+    }
+
+    // 現在のフレームレートを取得する
     public getFrameRate(): number {
         return this.frameRate;
     }

@@ -127,6 +127,10 @@ function createFrameRateDisplay() {
   if (container) {
     container.insertBefore(frameRateDisplay, container.firstChild);
   }
+
+  // フレームレート計算を開始
+  frameRateCalculator.start();
+
   // FPS表示を更新するためのインターバルを設定
   frameRateInterval = setInterval(() => {
     const frameRate = frameRateCalculator.getFrameRate().toFixed(2);
@@ -140,6 +144,8 @@ function removeFrameRateDisplay() {
   if (frameRateDisplay) {
     frameRateDisplay.remove();
     clearInterval(frameRateInterval);
+    // フレームレート計算を停止
+    frameRateCalculator.stop();
   }
 }
 
