@@ -1,4 +1,4 @@
-import { snapshotShowFps } from "@/utils/storage";
+import { snapshotShowFps, snapshotPosition, snapShotMiniMode } from "@/utils/storage";
 import { FrameRateCalculator } from "@/utils/frame-rate-calculator";
 
 // フレームレート計算クラスのインスタンスを作成
@@ -20,38 +20,54 @@ export default defineContentScript({
   }
 });
 
-// YoutubeのコンテンツUIがマウントされた際に呼び出される
+// Youtube のコンテンツ UI がマウントされた際に呼び出される
 function handleUiMount() {
-  // MutationObserverオブジェクトを作成し、handleMutations関数をコールバックとして指定
+  // MutationObserver オブジェクトを作成し、handleMutations 関数をコールバックとして指定
   const observer = new MutationObserver(handleMutations);
-  // document.bodyを監視対象に設定し、子要素の追加・削除および全ての子孫要素の変更を監視
+  // document.body の子要素の追加・削除および全ての子孫要素の変更を監視し、ボタンコンテナを表示する
   observer.observe(document.body, { childList: true, subtree: true });
+
+  // ミニモード設定の変更を監視し、ミニモードのON/OFFを切り替える
+  snapShotMiniMode.watch(async (miniMode) => { toggleButtons(miniMode); });
+  // FPS表示設定の変更を監視し、FPS表示のON/OFFを切り替える
+  snapshotShowFps.watch(async (showFps) => { toggleFrameRateDisplay(showFps); });
+  // ボタン位置設定の変更を監視し、ボタン位置を変更する
+  snapshotPosition.watch(async (position) => { changeButtonPosition(position); });
 }
 
-// DOMの変更を監視して処理を実行する
+// DOM の変更を監視して処理を実行する
 async function handleMutations() {
-  // Youtube 動画上にボタンを追加
-  addButtons();
-  // ストレージを確認し、FPS表示ありの場合、FPS表示を追加
-  const showFps = await snapshotShowFps.getValue();
-  if (showFps) {
-    createFrameRateDisplay();
+  // ミニモード設定に応じてボタンコンテナを表示する
+  initializeButtons(await snapShotMiniMode.getValue());
+  // FPS表示設定に応じてFPSを表示する
+  toggleFrameRateDisplay(await snapshotShowFps.getValue());
+  // ボタン位置設定に応じてボタン位置を変更する
+  changeButtonPosition(await snapshotPosition.getValue());
+}
+
+// ボタンコンテナを初期化する
+function initializeButtons(miniMode: boolean) {
+  // 既存のボタンコンテナが存在する場合は何もしない
+  if (document.getElementById('custom-buttons-container')) {
+    return;
   }
-  // ストレージの変更を監視し、FPS表示の追加・削除を切り替える
-  snapshotShowFps.watch(async (showFps) => {
-    if (showFps) {
-      createFrameRateDisplay();
-    } else {
-      removeFrameRateDisplay();
-    }
-  });
+  // ボタンコンテナを作成
+  addButtons(miniMode);
+}
+
+// ボタンコンテナのモードを切り替える
+function toggleButtons(miniMode: boolean) {
+  // 既存のボタンコンテナを削除
+  const existingContainer = document.getElementById('custom-buttons-container');
+  if (existingContainer) {
+    existingContainer.remove();
+  }
+  // ボタンコンテナを作成
+  addButtons(miniMode);
 }
 
 // Youtube 動画上にボタンを追加
-function addButtons() {
-  if (document.getElementById('custom-buttons-container'))
-    return;
-
+function addButtons(miniMode: boolean) {
   // ボタンを配置するコンテナを作成
   const container = document.createElement('div');
   container.id = 'custom-buttons-container';
@@ -65,15 +81,17 @@ function addButtons() {
   });
 
   // 配置するボタンの定義
-  const buttons = [
-    { label: '-1', class: 'skiptime -1' },
-    { label: '-.1', class: 'skiptime -0.1' },
-    { label: '-f', class: 'skipframe -1' },
-    { label: '+f', class: 'skipframe 1' },
-    { label: '+.1', class: 'skiptime 0.1' },
-    { label: '+1', class: 'skiptime 1' },
-    { label: '📷', class: 'screenshot' }
-  ];
+  const buttons = miniMode
+    ? [{ label: '📷', class: 'screenshot' }]
+    : [
+        { label: '-1', class: 'skiptime -1' },
+        { label: '-.1', class: 'skiptime -0.1' },
+        { label: '-f', class: 'skipframe -1' },
+        { label: '+f', class: 'skipframe 1' },
+        { label: '+.1', class: 'skiptime 0.1' },
+        { label: '+1', class: 'skiptime 1' },
+        { label: '📷', class: 'screenshot' }
+      ];
 
   // ボタンのスタイルを定義
   const buttonStyle = {
@@ -103,6 +121,56 @@ function addButtons() {
   const player = document.querySelector('.html5-video-player');
   if (player) {
     player.appendChild(container);
+  }
+}
+
+// ボタン群の位置を変更
+function changeButtonPosition(position: string) {
+  const container = document.getElementById('custom-buttons-container');
+  if (!container) return;
+
+  switch (position) {
+    case 'top-left':
+      Object.assign(container.style, {
+        top: '10px',
+        right: 'auto',
+        left: '30px'
+      });
+      break;
+    case 'top-right':
+      Object.assign(container.style, {
+        top: '10px',
+        right: '30px',
+        left: 'auto'
+      });
+      break;
+    case 'bottom-left':
+      Object.assign(container.style, {
+        top: 'auto',
+        right: 'auto',
+        bottom: '10px',
+        left: '30px'
+      });
+      break;
+    case 'bottom-right':
+      Object.assign(container.style, {
+        top: 'auto',
+        right: '30px',
+        bottom: '10px',
+        left: 'auto'
+      });
+      break;
+    default:
+      break;
+  }
+}
+
+// FPS表示/非表示を切り替える
+function toggleFrameRateDisplay(showFps: boolean) {
+  if (showFps) {
+    createFrameRateDisplay();
+  } else {
+    removeFrameRateDisplay();
   }
 }
 
