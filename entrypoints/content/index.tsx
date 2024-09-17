@@ -1,7 +1,7 @@
 import { snapshotShowFps, snapshotPosition, snapShotMiniMode } from "@/utils/storage";
 import { FrameRateCalculator } from "@/utils/frame-rate-calculator";
 
-// フレームレート計算クラスのインスタンスを作成
+// フレームレート計算クラスのインスタンス
 const frameRateCalculator = new FrameRateCalculator();
 // FPS表示更新用のインターバルID
 let frameRateInterval: NodeJS.Timeout;
@@ -24,11 +24,11 @@ export default defineContentScript({
 function handleUiMount() {
   // MutationObserver オブジェクトを作成し、handleMutations 関数をコールバックとして指定
   const observer = new MutationObserver(handleMutations);
-  // document.body の子要素の追加・削除および全ての子孫要素の変更を監視し、ボタンコンテナを表示する
+  // document.body の子要素の追加・削除および全ての子孫要素の変更を監視し、ボタンコンテナを配置する
   observer.observe(document.body, { childList: true, subtree: true });
 
   // ミニモード設定の変更を監視し、ミニモードのON/OFFを切り替える
-  snapShotMiniMode.watch(async (miniMode) => { toggleButtons(miniMode); });
+  snapShotMiniMode.watch(async (miniMode) => { toggleButtonsContainer(miniMode); });
   // FPS表示設定の変更を監視し、FPS表示のON/OFFを切り替える
   snapshotShowFps.watch(async (showFps) => { toggleFrameRateDisplay(showFps); });
   // ボタン位置設定の変更を監視し、ボタン位置を変更する
@@ -37,37 +37,37 @@ function handleUiMount() {
 
 // DOM の変更を監視して処理を実行する
 async function handleMutations() {
-  // ミニモード設定に応じてボタンコンテナを表示する
-  initializeButtons(await snapShotMiniMode.getValue());
+  // ミニモード設定に応じてボタンコンテナを初期表示する
+  initializeButtonsContainer(await snapShotMiniMode.getValue());
   // FPS表示設定に応じてFPSを表示する
   toggleFrameRateDisplay(await snapshotShowFps.getValue());
   // ボタン位置設定に応じてボタン位置を変更する
   changeButtonPosition(await snapshotPosition.getValue());
 }
 
-// ボタンコンテナを初期化する
-function initializeButtons(miniMode: boolean) {
+// ボタンコンテナを初期表示する
+function initializeButtonsContainer(miniMode: boolean) {
   // 既存のボタンコンテナが存在する場合は何もしない
   if (document.getElementById('custom-buttons-container')) {
     return;
   }
   // ボタンコンテナを作成
-  addButtons(miniMode);
+  addButtonsContainer(miniMode);
 }
 
 // ボタンコンテナのモードを切り替える
-function toggleButtons(miniMode: boolean) {
+function toggleButtonsContainer(miniMode: boolean) {
   // 既存のボタンコンテナを削除
   const existingContainer = document.getElementById('custom-buttons-container');
   if (existingContainer) {
     existingContainer.remove();
   }
   // ボタンコンテナを作成
-  addButtons(miniMode);
+  addButtonsContainer(miniMode);
 }
 
 // Youtube 動画上にボタンを追加
-function addButtons(miniMode: boolean) {
+function addButtonsContainer(miniMode: boolean) {
   // ボタンを配置するコンテナを作成
   const container = document.createElement('div');
   container.id = 'custom-buttons-container';
@@ -82,8 +82,9 @@ function addButtons(miniMode: boolean) {
 
   // 配置するボタンの定義
   const buttons = miniMode
-    ? [{ label: '📷', class: 'screenshot' }]
-    : [
+    ? [
+        { label: '📷', class: 'screenshot' }
+      ] : [
         { label: '-1', class: 'skiptime -1' },
         { label: '-.1', class: 'skiptime -0.1' },
         { label: '-f', class: 'skipframe -1' },
@@ -198,7 +199,6 @@ function createFrameRateDisplay() {
 
   // フレームレート計算を開始
   frameRateCalculator.start();
-
   // FPS表示を更新するためのインターバルを設定
   frameRateInterval = setInterval(() => {
     const frameRate = frameRateCalculator.getFrameRate().toFixed(2);
@@ -211,6 +211,7 @@ function removeFrameRateDisplay() {
   const frameRateDisplay = document.getElementById('frame-rate-display');
   if (frameRateDisplay) {
     frameRateDisplay.remove();
+    // FPS表示を更新するためのインターバルを停止
     clearInterval(frameRateInterval);
     // フレームレート計算を停止
     frameRateCalculator.stop();
