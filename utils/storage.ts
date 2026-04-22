@@ -1,4 +1,4 @@
-import { storage } from "wxt/storage";
+import { storage } from "#imports";
 
 // ストレージに保管する設定の型と初期値を定義(ミニモード)
 export const snapShotMiniMode =
