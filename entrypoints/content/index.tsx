@@ -6,6 +6,24 @@ const frameRateCalculator = new FrameRateCalculator();
 // FPS表示更新用のインターバルID
 let frameRateInterval: NodeJS.Timeout;
 
+// ---- A-B ループ状態 ----
+// A・B ポイント（未設定は null）
+let loopPointA: number | null = null;
+let loopPointB: number | null = null;
+// ループ中フラグ
+let isLooping = false;
+// ループによるシークを手動シークと区別するためのフラグ
+let isLoopingSeeking = false;
+// A・B・ループボタンの参照（状態更新に使用）
+let buttonA: HTMLButtonElement | null = null;
+let buttonB: HTMLButtonElement | null = null;
+let buttonLoop: HTMLButtonElement | null = null;
+// 動画イベントリスナーの参照（クリーンアップに使用）
+let timeupdateHandler: (() => void) | null = null;
+let seekedHandler: (() => void) | null = null;
+// SPA 遷移検知用
+let lastUrl = location.href;
+
 // コンテンツスクリプトのメイン関数
 export default defineContentScript({
   // マッチしたURLで拡張機能を有効にする
@@ -37,6 +55,11 @@ function handleUiMount() {
 
 // DOM の変更を監視して処理を実行する
 async function handleMutations() {
+  // SPA 遷移（URL 変化）を検知してループ状態をリセットする
+  if (location.href !== lastUrl) {
+    lastUrl = location.href;
+    resetLoopState();
+  }
   // ミニモード設定に応じてボタンコンテナを初期表示する
   initializeButtonsContainer(await snapShotMiniMode.getValue());
   // FPS表示設定に応じてFPSを表示する
@@ -57,6 +80,8 @@ function initializeButtonsContainer(miniMode: boolean) {
 
 // ボタンコンテナのモードを切り替える
 function toggleButtonsContainer(miniMode: boolean) {
+  // ミニモード切り替え時にループ状態をリセットする（③）
+  resetLoopState();
   // 既存のボタンコンテナを削除
   const existingContainer = document.getElementById('custom-buttons-container');
   if (existingContainer) {
@@ -77,10 +102,67 @@ function addButtonsContainer(miniMode: boolean) {
     right: '30px',
     zIndex: '1000',
     display: 'flex',
-    gap: '5px'
+    gap: '5px',
+    alignItems: 'center'
   });
 
-  // 配置するボタンの定義
+  // ボタンのベーススタイルを定義
+  const buttonStyle: Partial<CSSStyleDeclaration> = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '3px 5px',
+    minWidth: '30px',
+    backgroundColor: 'rgba(255, 0, 0, 0.6)',
+    color: '#ffffff',
+    border: 'none',
+    cursor: 'pointer',
+    fontSize: '14px',
+    borderRadius: '3px'
+  };
+
+  // A・B・ループボタン用の追加スタイル（時間の縦並び表示に使用）
+  const abButtonStyle: Partial<CSSStyleDeclaration> = {
+    ...buttonStyle,
+    flexDirection: 'column',
+    lineHeight: '1.2'
+  };
+
+  if (!miniMode) {
+    // A ボタン
+    buttonA = document.createElement('button');
+    Object.assign(buttonA.style, abButtonStyle);
+    updateAbButtonLabel(buttonA, 'A', loopPointA);
+    buttonA.addEventListener('click', () => handleLoopPointClick('A'));
+    container.appendChild(buttonA);
+
+    // B ボタン
+    buttonB = document.createElement('button');
+    Object.assign(buttonB.style, abButtonStyle);
+    updateAbButtonLabel(buttonB, 'B', loopPointB);
+    buttonB.addEventListener('click', () => handleLoopPointClick('B'));
+    container.appendChild(buttonB);
+
+    // ループボタン
+    buttonLoop = document.createElement('button');
+    Object.assign(buttonLoop.style, abButtonStyle);
+    buttonLoop.innerText = '🔁';
+    buttonLoop.disabled = true;
+    Object.assign(buttonLoop.style, {
+      opacity: '0.4',
+      cursor: 'not-allowed'
+    });
+    buttonLoop.addEventListener('click', () => {
+      if (isLooping) {
+        stopLoop();
+      } else {
+        startLoop();
+      }
+    });
+    container.appendChild(buttonLoop);
+  }
+
+  // 配置するボタンの定義（スキップ・スクリーンショット）
   const buttons = miniMode
     ? [
         { label: '📷', class: 'screenshot' }
@@ -93,20 +175,6 @@ function addButtonsContainer(miniMode: boolean) {
         { label: '+1', class: 'skiptime 1' },
         { label: '📷', class: 'screenshot' }
       ];
-
-  // ボタンのスタイルを定義
-  const buttonStyle = {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '5px',
-    width: '30px',
-    backgroundColor: 'rgba(255, 0, 0, 0.6)',
-    color: '#ffffff',
-    border: 'none',
-    cursor: 'pointer',
-    fontSize: '14px',
-    borderRadius: '3px'
-  };
 
   // ボタンを作成してコンテナに配置
   buttons.forEach(buttonConfig => {
@@ -122,6 +190,12 @@ function addButtonsContainer(miniMode: boolean) {
   const player = document.querySelector('.html5-video-player');
   if (player) {
     player.appendChild(container);
+  }
+
+  // 動画イベントリスナーを設定する（②）
+  const video = document.querySelector('video');
+  if (video) {
+    setupLoopListeners(video);
   }
 }
 
@@ -288,4 +362,156 @@ function getFormattedDate() {
   const s = now.getSeconds().toString().padStart(2, '0');
   const ms = now.getMilliseconds().toString().padStart(3, '0');
   return `${y}${m}${d}_${h}${mi}${s}_${ms}`;
+}
+
+// ---- A-B ループ機能 ----
+
+// 秒数を M:SS または H:MM:SS 形式にフォーマットする
+function formatLoopTime(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (h > 0) {
+    return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  }
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+// A・B ボタンのラベルを更新する（時間が設定済みの場合は縮小表示）
+function updateAbButtonLabel(
+  button: HTMLButtonElement,
+  label: string,
+  time: number | null
+) {
+  // 既存の子要素をクリア
+  button.replaceChildren();
+  const span = document.createElement('span');
+  span.innerText = label;
+  button.appendChild(span);
+  if (time !== null) {
+    const small = document.createElement('small');
+    small.innerText = formatLoopTime(time);
+    Object.assign(small.style, {
+      fontSize: '9px',
+      display: 'block',
+      lineHeight: '1'
+    });
+    button.appendChild(small);
+  }
+}
+
+// ループボタンの有効・無効状態を更新する
+function updateLoopButtonState() {
+  if (!buttonLoop) return;
+  const canLoop =
+    loopPointA !== null &&
+    loopPointB !== null &&
+    loopPointA < loopPointB;
+  buttonLoop.disabled = !canLoop;
+  Object.assign(buttonLoop.style, {
+    opacity: canLoop ? '1' : '0.4',
+    cursor: canLoop ? 'pointer' : 'not-allowed'
+  });
+}
+
+// A または B ポイントをクリック時に登録する
+function handleLoopPointClick(point: 'A' | 'B') {
+  const video = document.querySelector('video');
+  if (!video) return;
+  const time = video.currentTime;
+  if (point === 'A') {
+    loopPointA = time;
+    if (buttonA) updateAbButtonLabel(buttonA, 'A', loopPointA);
+  } else {
+    loopPointB = time;
+    if (buttonB) updateAbButtonLabel(buttonB, 'B', loopPointB);
+  }
+  updateLoopButtonState();
+  // ループ中に A > B になった場合はループを停止する（④）
+  if (
+    isLooping &&
+    loopPointA !== null &&
+    loopPointB !== null &&
+    loopPointA >= loopPointB
+  ) {
+    stopLoop();
+  }
+}
+
+// ループを開始する
+function startLoop() {
+  isLooping = true;
+  if (buttonLoop) {
+    Object.assign(buttonLoop.style, {
+      backgroundColor: 'rgba(0, 180, 0, 0.8)',
+      opacity: '1'
+    });
+  }
+}
+
+// ループを停止する
+function stopLoop() {
+  isLooping = false;
+  if (buttonLoop) {
+    Object.assign(buttonLoop.style, {
+      backgroundColor: 'rgba(255, 0, 0, 0.6)'
+    });
+    updateLoopButtonState();
+  }
+}
+
+// 動画の timeupdate・seeked イベントリスナーを設定する（②）
+function setupLoopListeners(video: HTMLVideoElement) {
+  // 既存のリスナーを先に削除する
+  removeLoopListeners(video);
+
+  // timeupdate: B ポイントを超えたら A ポイントへ戻す
+  timeupdateHandler = () => {
+    if (!isLooping || loopPointA === null || loopPointB === null) return;
+    if (video.currentTime >= loopPointB) {
+      isLoopingSeeking = true; // ループによるシークを手動シークと区別する（①）
+      video.currentTime = loopPointA;
+    }
+  };
+
+  // seeked: 手動シークによるループ停止（①）
+  seekedHandler = () => {
+    if (isLoopingSeeking) {
+      isLoopingSeeking = false; // ループ由来のシークなので無視する
+      return;
+    }
+    if (isLooping) {
+      stopLoop();
+    }
+  };
+
+  video.addEventListener('timeupdate', timeupdateHandler);
+  video.addEventListener('seeked', seekedHandler);
+}
+
+// 動画イベントリスナーを削除する（②）
+function removeLoopListeners(video: HTMLVideoElement) {
+  if (timeupdateHandler) {
+    video.removeEventListener('timeupdate', timeupdateHandler);
+    timeupdateHandler = null;
+  }
+  if (seekedHandler) {
+    video.removeEventListener('seeked', seekedHandler);
+    seekedHandler = null;
+  }
+}
+
+// ループ状態をすべてリセットする（③⑥）
+function resetLoopState() {
+  const video = document.querySelector('video');
+  if (video) {
+    removeLoopListeners(video);
+  }
+  loopPointA = null;
+  loopPointB = null;
+  isLooping = false;
+  isLoopingSeeking = false;
+  buttonA = null;
+  buttonB = null;
+  buttonLoop = null;
 }
