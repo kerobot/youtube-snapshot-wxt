@@ -6,23 +6,154 @@ const frameRateCalculator = new FrameRateCalculator();
 // FPS表示更新用のインターバルID
 let frameRateInterval: NodeJS.Timeout;
 
-// ---- A-B ループ状態 ----
-// A・B ポイント（未設定は null）
-let loopPointA: number | null = null;
-let loopPointB: number | null = null;
-// ループ中フラグ
-let isLooping = false;
-// ループによるシークを手動シークと区別するためのフラグ
-let isLoopingSeeking = false;
-// A・B・ループボタンの参照（状態更新に使用）
+// ---- A-B ループ機能：動画要素単位のコントローラ ----
+
+// 動画要素ごとの A-B ループ状態と操作を管理するクラス
+class ABLoopController {
+  private readonly video: HTMLVideoElement;
+
+  private pointA: number | null = null;
+  private pointB: number | null = null;
+  private isLooping = false;
+
+  // ループで A へ戻したシークと手動シークを区別するための期待移動先
+  private expectedSeekTarget: number | null = null;
+  // シーク位置の許容誤差（秒）: YouTube のデコード処理でわずかなズレが生じるため 0.1 秒を設定
+  private readonly epsilon = 0.1;
+
+  // UI ボタンへの参照（null のときは UI 更新をスキップ）
+  private buttonA: HTMLButtonElement | null = null;
+  private buttonB: HTMLButtonElement | null = null;
+  private buttonLoop: HTMLButtonElement | null = null;
+
+  // timeupdate: B ポイントを超えたら A ポイントへ戻す
+  private readonly onTimeUpdate = () => {
+    if (!this.isLooping || this.pointA === null || this.pointB === null) return;
+    if (this.video.currentTime >= this.pointB) {
+      this.expectedSeekTarget = this.pointA;
+      this.video.currentTime = this.pointA;
+    }
+  };
+
+  // seeked: ループ由来のシークは無視し、手動シークでループを停止する
+  private readonly onSeeked = () => {
+    if (this.expectedSeekTarget !== null) {
+      const diff = Math.abs(this.video.currentTime - this.expectedSeekTarget);
+      this.expectedSeekTarget = null;
+      if (diff <= this.epsilon) {
+        return; // ループによるシークなので無視する
+      }
+      // 期待と異なる位置への移動 = 手動シーク等
+    }
+    if (this.isLooping) {
+      this.stopLoop();
+    }
+  };
+
+  constructor(video: HTMLVideoElement) {
+    this.video = video;
+    this.video.addEventListener('timeupdate', this.onTimeUpdate);
+    this.video.addEventListener('seeked', this.onSeeked);
+  }
+
+  // リスナーを解除してコントローラを破棄する
+  dispose() {
+    this.video.removeEventListener('timeupdate', this.onTimeUpdate);
+    this.video.removeEventListener('seeked', this.onSeeked);
+    this.isLooping = false;
+    this.expectedSeekTarget = null;
+  }
+
+  // UI ボタンをアタッチし、現在の状態に合わせて表示をリセットする
+  setButtons(
+    btnA: HTMLButtonElement | null,
+    btnB: HTMLButtonElement | null,
+    btnLoop: HTMLButtonElement | null
+  ) {
+    this.buttonA = btnA;
+    this.buttonB = btnB;
+    this.buttonLoop = btnLoop;
+    // 新しい動画に切り替わった際はラベルをリセットする
+    if (this.buttonA) updateAbButtonLabel(this.buttonA, 'A', this.pointA);
+    if (this.buttonB) updateAbButtonLabel(this.buttonB, 'B', this.pointB);
+    this.updateLoopButtonState();
+  }
+
+  // A ポイントを現在の再生位置に設定する
+  setPointA() {
+    this.pointA = this.video.currentTime;
+    if (this.buttonA) updateAbButtonLabel(this.buttonA, 'A', this.pointA);
+    this.ensureLoopValidity();
+  }
+
+  // B ポイントを現在の再生位置に設定する
+  setPointB() {
+    this.pointB = this.video.currentTime;
+    if (this.buttonB) updateAbButtonLabel(this.buttonB, 'B', this.pointB);
+    this.ensureLoopValidity();
+  }
+
+  // ループを開始できる条件（A < B）を満たしているか返す
+  canLoop(): boolean {
+    return this.pointA !== null && this.pointB !== null && this.pointA < this.pointB;
+  }
+
+  // ループを開始する
+  startLoop() {
+    if (!this.canLoop()) return;
+    this.isLooping = true;
+    if (this.buttonLoop) {
+      Object.assign(this.buttonLoop.style, {
+        backgroundColor: 'rgba(0, 180, 0, 0.8)',
+        opacity: '1'
+      });
+    }
+  }
+
+  // ループを停止する
+  stopLoop() {
+    this.isLooping = false;
+    if (this.buttonLoop) {
+      Object.assign(this.buttonLoop.style, {
+        backgroundColor: 'rgba(255, 0, 0, 0.6)'
+      });
+      this.updateLoopButtonState();
+    }
+  }
+
+  // ループ中フラグを返す
+  getIsLooping(): boolean {
+    return this.isLooping;
+  }
+
+  // ループ可否が変化した際にループ状態の整合性を保つ
+  private ensureLoopValidity() {
+    if (this.isLooping && !this.canLoop()) this.stopLoop();
+    this.updateLoopButtonState();
+  }
+
+  // ループボタンの有効・無効状態を更新する
+  private updateLoopButtonState() {
+    if (!this.buttonLoop) return;
+    const canLoop = this.canLoop();
+    this.buttonLoop.disabled = !canLoop;
+    Object.assign(this.buttonLoop.style, {
+      opacity: canLoop ? '1' : '0.4',
+      cursor: canLoop ? 'pointer' : 'not-allowed'
+    });
+  }
+}
+
+// ---- グローバル状態 ----
+// SPA 遷移検知用
+let lastUrl = location.href;
+// 現在管理中の動画要素と ABLoopController
+let managedVideo: HTMLVideoElement | null = null;
+let currentController: ABLoopController | null = null;
+// A・B・ループボタンの参照（コンテナ再生成時にコントローラへ渡すために保持）
 let buttonA: HTMLButtonElement | null = null;
 let buttonB: HTMLButtonElement | null = null;
 let buttonLoop: HTMLButtonElement | null = null;
-// 動画イベントリスナーの参照（クリーンアップに使用）
-let timeupdateHandler: (() => void) | null = null;
-let seekedHandler: (() => void) | null = null;
-// SPA 遷移検知用
-let lastUrl = location.href;
 
 // コンテンツスクリプトのメイン関数
 export default defineContentScript({
@@ -58,8 +189,24 @@ async function handleMutations() {
   // SPA 遷移（URL 変化）を検知してループ状態をリセットする
   if (location.href !== lastUrl) {
     lastUrl = location.href;
-    resetLoopState();
+    teardownLoop();
   }
+
+  // 動画要素の差し替えを検知してコントローラを付け替える
+  const video = document.querySelector('video') as HTMLVideoElement | null;
+  if (video !== managedVideo) {
+    currentController?.dispose();
+    currentController = null;
+    managedVideo = video;
+    if (video) {
+      currentController = new ABLoopController(video);
+      // ボタンコンテナがフルモードで既に存在する場合は即座にアタッチする
+      if (buttonA && buttonB && buttonLoop) {
+        currentController.setButtons(buttonA, buttonB, buttonLoop);
+      }
+    }
+  }
+
   // ミニモード設定に応じてボタンコンテナを初期表示する
   initializeButtonsContainer(await snapShotMiniMode.getValue());
   // FPS表示設定に応じてFPSを表示する
@@ -81,7 +228,7 @@ function initializeButtonsContainer(miniMode: boolean) {
 // ボタンコンテナのモードを切り替える
 function toggleButtonsContainer(miniMode: boolean) {
   // ミニモード切り替え時にループ状態をリセットする（③）
-  resetLoopState();
+  teardownLoop();
   // 既存のボタンコンテナを削除
   const existingContainer = document.getElementById('custom-buttons-container');
   if (existingContainer) {
@@ -132,15 +279,15 @@ function addButtonsContainer(miniMode: boolean) {
     // A ボタン
     buttonA = document.createElement('button');
     Object.assign(buttonA.style, abButtonStyle);
-    updateAbButtonLabel(buttonA, 'A', loopPointA);
-    buttonA.addEventListener('click', () => handleLoopPointClick('A'));
+    updateAbButtonLabel(buttonA, 'A', null);
+    buttonA.addEventListener('click', () => currentController?.setPointA());
     container.appendChild(buttonA);
 
     // B ボタン
     buttonB = document.createElement('button');
     Object.assign(buttonB.style, abButtonStyle);
-    updateAbButtonLabel(buttonB, 'B', loopPointB);
-    buttonB.addEventListener('click', () => handleLoopPointClick('B'));
+    updateAbButtonLabel(buttonB, 'B', null);
+    buttonB.addEventListener('click', () => currentController?.setPointB());
     container.appendChild(buttonB);
 
     // ループボタン
@@ -153,10 +300,11 @@ function addButtonsContainer(miniMode: boolean) {
       cursor: 'not-allowed'
     });
     buttonLoop.addEventListener('click', () => {
-      if (isLooping) {
-        stopLoop();
+      if (!currentController) return;
+      if (currentController.getIsLooping()) {
+        currentController.stopLoop();
       } else {
-        startLoop();
+        currentController.startLoop();
       }
     });
     container.appendChild(buttonLoop);
@@ -192,10 +340,17 @@ function addButtonsContainer(miniMode: boolean) {
     player.appendChild(container);
   }
 
-  // 動画イベントリスナーを設定する（②）
-  const video = document.querySelector('video');
-  if (video) {
-    setupLoopListeners(video);
+  // フルモードのときは動画要素にボタンをアタッチする（②）
+  if (!miniMode) {
+    const video = document.querySelector('video') as HTMLVideoElement | null;
+    if (video) {
+      if (video !== managedVideo) {
+        currentController?.dispose();
+        managedVideo = video;
+        currentController = new ABLoopController(video);
+      }
+      currentController?.setButtons(buttonA, buttonB, buttonLoop);
+    }
   }
 }
 
@@ -400,117 +555,11 @@ function updateAbButtonLabel(
   }
 }
 
-// ループボタンの有効・無効状態を更新する
-function updateLoopButtonState() {
-  if (!buttonLoop) return;
-  const canLoop =
-    loopPointA !== null &&
-    loopPointB !== null &&
-    loopPointA < loopPointB;
-  buttonLoop.disabled = !canLoop;
-  Object.assign(buttonLoop.style, {
-    opacity: canLoop ? '1' : '0.4',
-    cursor: canLoop ? 'pointer' : 'not-allowed'
-  });
-}
-
-// A または B ポイントをクリック時に登録する
-function handleLoopPointClick(point: 'A' | 'B') {
-  const video = document.querySelector('video');
-  if (!video) return;
-  const time = video.currentTime;
-  if (point === 'A') {
-    loopPointA = time;
-    if (buttonA) updateAbButtonLabel(buttonA, 'A', loopPointA);
-  } else {
-    loopPointB = time;
-    if (buttonB) updateAbButtonLabel(buttonB, 'B', loopPointB);
-  }
-  updateLoopButtonState();
-  // ループ中に A > B になった場合はループを停止する（④）
-  if (
-    isLooping &&
-    loopPointA !== null &&
-    loopPointB !== null &&
-    loopPointA >= loopPointB
-  ) {
-    stopLoop();
-  }
-}
-
-// ループを開始する
-function startLoop() {
-  isLooping = true;
-  if (buttonLoop) {
-    Object.assign(buttonLoop.style, {
-      backgroundColor: 'rgba(0, 180, 0, 0.8)',
-      opacity: '1'
-    });
-  }
-}
-
-// ループを停止する
-function stopLoop() {
-  isLooping = false;
-  if (buttonLoop) {
-    Object.assign(buttonLoop.style, {
-      backgroundColor: 'rgba(255, 0, 0, 0.6)'
-    });
-    updateLoopButtonState();
-  }
-}
-
-// 動画の timeupdate・seeked イベントリスナーを設定する（②）
-function setupLoopListeners(video: HTMLVideoElement) {
-  // 既存のリスナーを先に削除する
-  removeLoopListeners(video);
-
-  // timeupdate: B ポイントを超えたら A ポイントへ戻す
-  timeupdateHandler = () => {
-    if (!isLooping || loopPointA === null || loopPointB === null) return;
-    if (video.currentTime >= loopPointB) {
-      isLoopingSeeking = true; // ループによるシークを手動シークと区別する（①）
-      video.currentTime = loopPointA;
-    }
-  };
-
-  // seeked: 手動シークによるループ停止（①）
-  seekedHandler = () => {
-    if (isLoopingSeeking) {
-      isLoopingSeeking = false; // ループ由来のシークなので無視する
-      return;
-    }
-    if (isLooping) {
-      stopLoop();
-    }
-  };
-
-  video.addEventListener('timeupdate', timeupdateHandler);
-  video.addEventListener('seeked', seekedHandler);
-}
-
-// 動画イベントリスナーを削除する（②）
-function removeLoopListeners(video: HTMLVideoElement) {
-  if (timeupdateHandler) {
-    video.removeEventListener('timeupdate', timeupdateHandler);
-    timeupdateHandler = null;
-  }
-  if (seekedHandler) {
-    video.removeEventListener('seeked', seekedHandler);
-    seekedHandler = null;
-  }
-}
-
-// ループ状態をすべてリセットする（③⑥）
-function resetLoopState() {
-  const video = document.querySelector('video');
-  if (video) {
-    removeLoopListeners(video);
-  }
-  loopPointA = null;
-  loopPointB = null;
-  isLooping = false;
-  isLoopingSeeking = false;
+// ループ状態・コントローラ・ボタン参照をすべてリセットする（③⑥）
+function teardownLoop() {
+  currentController?.dispose();
+  currentController = null;
+  managedVideo = null;
   buttonA = null;
   buttonB = null;
   buttonLoop = null;
