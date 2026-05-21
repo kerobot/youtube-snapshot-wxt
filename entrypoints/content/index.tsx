@@ -29,9 +29,20 @@ class ABLoopController {
   // timeupdate: B ポイントを超えたら A ポイントへ戻す
   private readonly onTimeUpdate = () => {
     if (!this.isLooping || this.pointA === null || this.pointB === null) return;
+    if (this.video.seeking && this.expectedSeekTarget === null) return;
     if (this.video.currentTime >= this.pointB) {
       this.expectedSeekTarget = this.pointA;
       this.video.currentTime = this.pointA;
+    }
+  };
+
+  // seeking: 手動シーク開始時は即座にループを停止する
+  private readonly onSeeking = () => {
+    if (this.expectedSeekTarget !== null) {
+      return;
+    }
+    if (this.isLooping) {
+      this.stopLoop();
     }
   };
 
@@ -53,12 +64,14 @@ class ABLoopController {
   constructor(video: HTMLVideoElement) {
     this.video = video;
     this.video.addEventListener('timeupdate', this.onTimeUpdate);
+    this.video.addEventListener('seeking', this.onSeeking);
     this.video.addEventListener('seeked', this.onSeeked);
   }
 
   // リスナーを解除してコントローラを破棄する
   dispose() {
     this.video.removeEventListener('timeupdate', this.onTimeUpdate);
+    this.video.removeEventListener('seeking', this.onSeeking);
     this.video.removeEventListener('seeked', this.onSeeked);
     this.isLooping = false;
     this.expectedSeekTarget = null;
@@ -189,6 +202,8 @@ async function handleMutations() {
   // SPA 遷移（URL 変化）を検知してループ状態をリセットする
   if (location.href !== lastUrl) {
     lastUrl = location.href;
+    const existingContainer = document.getElementById('custom-buttons-container');
+    existingContainer?.remove();
     teardownLoop();
   }
 
