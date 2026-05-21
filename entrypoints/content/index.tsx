@@ -29,7 +29,7 @@ class ABLoopController {
   // timeupdate: B ポイントを超えたら A ポイントへ戻す
   private readonly onTimeUpdate = () => {
     if (!this.isLooping || this.pointA === null || this.pointB === null) return;
-    if (this.video.seeking && this.expectedSeekTarget === null) return;
+    if (this.video.seeking) return;
     if (this.video.currentTime >= this.pointB) {
       this.expectedSeekTarget = this.pointA;
       this.video.currentTime = this.pointA;
@@ -38,10 +38,7 @@ class ABLoopController {
 
   // seeking: 手動シーク開始時は即座にループを停止する
   private readonly onSeeking = () => {
-    if (this.expectedSeekTarget !== null) {
-      return;
-    }
-    if (this.isLooping) {
+    if (this.expectedSeekTarget === null && this.isLooping) {
       this.stopLoop();
     }
   };
